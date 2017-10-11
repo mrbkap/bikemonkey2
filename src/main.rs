@@ -303,10 +303,10 @@ fn main() {
                 .possible_values(&Gender::variants()),
         )
         .arg(Arg::from_usage(
-            "-f, --firstname <name>  'Find a rider with a given first name'",
+            "[-f, --firstname <name>]  'Find a rider with a given first name'",
         ))
         .arg(Arg::from_usage(
-            "-l, --lastname <name>  'Find a rider with a given last name'",
+            "[-l, --lastname <name>]  'Find a rider with a given last name'",
         ))
         .arg(Arg::from_usage("-d, --debug   'Enable debugging'"))
         .arg(Arg::from_usage("[file]        'File to read as input'"))
