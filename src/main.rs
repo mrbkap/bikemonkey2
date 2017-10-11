@@ -49,6 +49,8 @@ struct Rider {
     displaytime: String,
     gender: Gender,
     course: Course,
+    willow_creek: bool,
+    fort_ross: bool,
     bib: u64,
     _id: String,
 }
@@ -68,31 +70,37 @@ impl Rider {
             Ok(Duration::from_secs(secs))
         }
 
-        fn parse_course(s: Vec<&str>) -> Result<(Course, Gender)> {
+        fn parse_course(s: Vec<&str>) -> Result<(Course, bool, bool, Gender)> {
             let mut idx = 0;
-            let course = match s[0] {
+            let (course, fr) = match s[0] {
                 "IL" => {
                     if s.len() < 3 {
                         return Err(de::Error::custom(format!("bad route {:?}", s)));
                     }
                     idx += 1;
-                    Course::IlRegno
+                    (Course::IlRegno, false)
                 }
-                "PICCOLO" => Course::Piccollo,
-                "MEDIO" => Course::Medio,
+                "PICCOLO" => (Course::Piccollo, false),
+                "MEDIO" => (Course::Medio, false),
                 "GRAN" => {
+                    let mut fr = false;
                     if s[1] == "Fort" {
                         idx += 2;
+                        fr = true;
                     }
-                    Course::Gran
+                    (Course::Gran, fr)
                 }
                 "FAMILY" => return Err(de::Error::custom("don't deal with families")), // meh
                 _ => return Err(de::Error::custom(format!("unknown course {:?}", s))),
             };
 
+            let mut wc = false;
             idx += 1;
             if idx < s.len() {
-                if s[idx] == "WC" || s[idx] == "TANDEM" {
+                if s[idx] == "WC" {
+                    wc = true;
+                    idx += 1;
+                } else if s[idx] == "TANDEM" {
                     idx += 1;
                 }
             }
@@ -103,7 +111,7 @@ impl Rider {
                 Some(other) => return Err(de::Error::custom(format!("bad gender {:?}", other))),
             };
 
-            Ok((course, gender))
+            Ok((course, wc, fr, gender))
         }
 
         let firstname = v["firstname"].as_str().ok_or(de::Error::custom(
@@ -126,7 +134,7 @@ impl Rider {
             .ok_or(de::Error::custom(format!("bad course {:?}", v["route"])))?
             .split(" ")
             .collect::<Vec<_>>();
-        let (course, gender) = parse_course(route)?;
+        let (course, wc, fr, gender) = parse_course(route)?;
         let bib = v["bib"]
             .as_u64()
             .ok_or(de::Error::custom(format!("bad bibno {:?}", v["bib"])))?;
@@ -141,6 +149,8 @@ impl Rider {
             displaytime: String::from(t),
             gender: gender,
             course: course,
+            willow_creek: wc,
+            fort_ross: fr,
             bib: bib,
             _id: String::from(id),
         })
@@ -271,13 +281,17 @@ impl Bikemonkey {
 
         for &(idx, rider) in matches.iter() {
             println!(
-                "Rider {} {} came in position {} with a time of {} out of {} matching rider{}",
+                "Rider {} {} came in position {} with a time of {} out of {} matching rider{} on \
+                 the {}{}{} route",
                 rider.firstname,
                 rider.lastname,
                 idx + 1,
                 rider.displaytime,
                 riders.len(),
-                if riders.len() > 1 { "s" } else { "" }
+                if riders.len() > 1 { "s" } else { "" },
+                rider.course,
+                if rider.willow_creek { " +WC" } else { "" },
+                if rider.fort_ross { " Fort Ross" } else { "" },
             );
         }
     }
@@ -302,12 +316,22 @@ fn main() {
                 .takes_value(true)
                 .possible_values(&Gender::variants()),
         )
-        .arg(Arg::from_usage(
-            "[-f, --firstname <name>]  'Find a rider with a given first name'",
-        ))
-        .arg(Arg::from_usage(
-            "[-l, --lastname <name>]  'Find a rider with a given last name'",
-        ))
+        .arg(
+            Arg::with_name("firstname")
+                .short("f")
+                .multiple(false)
+                .help("Find a rider with a given first name")
+                .takes_value(true)
+                .required(false),
+        )
+        .arg(
+            Arg::with_name("lastname")
+                .short("l")
+                .multiple(false)
+                .help("Find a rider with a given last name")
+                .takes_value(true)
+                .required(false),
+        )
         .arg(Arg::from_usage("-d, --debug   'Enable debugging'"))
         .arg(Arg::from_usage("[file]        'File to read as input'"))
         .after_help(
