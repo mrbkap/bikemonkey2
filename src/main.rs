@@ -14,18 +14,17 @@ use std::path::Path;
 use std::error::Error;
 
 arg_enum! {
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     enum Course {
         IlRegno,
         Gran,
         Medio,
-        Piccollo,
-        Family
+        Piccollo
     }
 }
 
 arg_enum! {
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     enum Gender {
         Male,
         Female
@@ -40,7 +39,7 @@ struct Results {
     total_record_count: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Rider {
     firstname: String,
     lastname: String,
@@ -146,6 +145,78 @@ impl Rider {
     }
 }
 
+struct Bikemonkey {
+    riders: Vec<Rider>,
+    debug: bool,
+    courses: Option<Vec<Course>>,
+    gender: Option<Gender>,
+}
+
+impl Bikemonkey {
+    fn parse_command_line(matches: &clap::ArgMatches) -> Bikemonkey {
+        let courses = values_t!(matches.values_of("course"), Course).ok();
+        let gender = value_t!(matches.value_of("gender"), Gender).ok();
+        let debug = matches.is_present("debug");
+
+        Bikemonkey {
+            riders: Vec::new(),
+            debug: debug,
+            courses: courses,
+            gender: gender,
+        }
+    }
+
+    fn read_json(&mut self, path: &Path) -> std::io::Result<()> {
+        let file = File::open(&path)?;
+        let blob: Results = serde_json::from_reader(file)?;
+        let maybe_riders = blob.records
+            .iter()
+            .map(Rider::from_value)
+            .filter_map(|r| {
+                if self.debug && r.is_err() {
+                    println!("Warning: bad rider found {:?}", r);
+                }
+                r.ok()
+            })
+            .collect::<Vec<_>>();
+
+        self.riders = maybe_riders
+            .iter()
+            .filter(|r| {
+                if let Some(ref courses) = self.courses {
+                    if !courses.contains(&r.course) {
+                        return false;
+                    }
+                }
+                if let Some(ref gender) = self.gender {
+                    if r.gender != *gender {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        self.riders.sort_unstable_by_key(|r| r.elapsedtime);
+        Ok(())
+    }
+
+    fn print_all(&self) {
+        for (idx, r) in self.riders.iter().enumerate() {
+            println!(
+                "{} [{}, {}] {} {} ({})",
+                idx + 1,
+                r.bib,
+                r._id,
+                r.firstname,
+                r.lastname,
+                r.displaytime
+            )
+        }
+    }
+}
+
 fn main() {
     let matches = App::new("bikemonkey2")
         .author("Blake Kaplan <mrbkap@gmail.com>")
@@ -169,55 +240,12 @@ fn main() {
         .arg(Arg::from_usage("[file]        'File to read as input'"))
         .get_matches();
 
-    let courses = values_t!(matches.values_of("course"), Course).ok();
-    let gender = value_t!(matches.value_of("gender"), Gender).ok();
-    let debug = matches.is_present("debug");
-
+    let mut program = Bikemonkey::parse_command_line(&matches);
     let path = Path::new(matches.value_of("file").unwrap_or("lgfresults.json"));
-    let file = match File::open(&path) {
+    match program.read_json(&path) {
         Err(why) => panic!("couldn't open {}: {}", path.display(), why.description()),
-        Ok(file) => file,
-    };
-    let blob: Results = serde_json::from_reader(file).unwrap();
-    let mut maybe_riders = blob.records
-        .iter()
-        .map(Rider::from_value)
-        .filter_map(|r| {
-            if debug && r.is_err() {
-                println!("Warning: bad rider found {:?}", r);
-            }
-            r.ok()
-        })
-        .collect::<Vec<_>>();
-
-    let mut riders = maybe_riders
-        .iter_mut()
-        .filter(|r| {
-            if let Some(ref courses) = courses {
-                if !courses.contains(&r.course) {
-                    return false;
-                }
-            }
-            if let Some(ref gender) = gender {
-                if r.gender != *gender {
-                    return false;
-                }
-            }
-
-            true
-        })
-        .collect::<Vec<_>>();
-    riders.sort_unstable_by_key(|r| r.elapsedtime);
-
-    for (idx, r) in riders.iter().enumerate() {
-        println!(
-            "{} [{}, {}] {} {} ({:?})",
-            idx + 1,
-            r.bib,
-            r._id,
-            r.firstname,
-            r.lastname,
-            r.displaytime
-        )
+        _ => {}
     }
+
+    program.print_all();
 }
