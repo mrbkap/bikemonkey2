@@ -1,6 +1,6 @@
+extern crate caseless;
 #[macro_use]
 extern crate clap;
-extern crate caseless;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -198,7 +198,9 @@ impl Bikemonkey {
             })
             .collect::<Vec<_>>();
 
-        Ok(Bikemonkey { riders: maybe_riders })
+        Ok(Bikemonkey {
+            riders: maybe_riders,
+        })
     }
 
     fn filter_riders(&self, filter_options: &FilterOptions) -> Vec<&Rider> {
@@ -240,27 +242,27 @@ impl Bikemonkey {
 
     fn print_info(&self, filter_options: FilterOptions) {
         let riders = self.filter_riders(&filter_options);
-        let matches = riders.iter().enumerate().filter(|&(_idx, r)| {
-            match filter_options.firstname {
-                Some(ref name) => {
-                    if !canonical_caseless_match_str(&r.firstname, name) {
-                        return false
-                    }
-                }
-                _ => {}
-            }
-
-            match filter_options.lastname {
-                Some(ref name) => {
-                    if !canonical_caseless_match_str(&r.lastname, name) {
+        let matches = riders
+            .iter()
+            .enumerate()
+            .filter(|&(_idx, r)| {
+                match filter_options.firstname {
+                    Some(ref name) => if !canonical_caseless_match_str(&r.firstname, name) {
                         return false;
-                    }
+                    },
+                    _ => {}
                 }
-                _ => {}
-            }
 
-            true
-        }).collect::<Vec<_>>();
+                match filter_options.lastname {
+                    Some(ref name) => if !canonical_caseless_match_str(&r.lastname, name) {
+                        return false;
+                    },
+                    _ => {}
+                }
+
+                true
+            })
+            .collect::<Vec<_>>();
 
         if matches.is_empty() {
             println!("No riders were found.");
@@ -268,13 +270,15 @@ impl Bikemonkey {
         }
 
         for &(idx, rider) in matches.iter() {
-            println!("Rider {} {} came in position {} with a time of {} out of {} matching rider{}",
-                     rider.firstname,
-                     rider.lastname,
-                     idx + 1,
-                     rider.displaytime,
-                     riders.len(),
-                     if riders.len() > 1 { "s" } else { "" });
+            println!(
+                "Rider {} {} came in position {} with a time of {} out of {} matching rider{}",
+                rider.firstname,
+                rider.lastname,
+                idx + 1,
+                rider.displaytime,
+                riders.len(),
+                if riders.len() > 1 { "s" } else { "" }
+            );
         }
     }
 }
@@ -298,14 +302,20 @@ fn main() {
                 .takes_value(true)
                 .possible_values(&Gender::variants()),
         )
-        .arg(Arg::from_usage("-f, --firstname <name>  'Find a rider with a given first name'"))
-        .arg(Arg::from_usage("-l, --lastname <name>  'Find a rider with a given last name'"))
+        .arg(Arg::from_usage(
+            "-f, --firstname <name>  'Find a rider with a given first name'",
+        ))
+        .arg(Arg::from_usage(
+            "-l, --lastname <name>  'Find a rider with a given last name'",
+        ))
         .arg(Arg::from_usage("-d, --debug   'Enable debugging'"))
         .arg(Arg::from_usage("[file]        'File to read as input'"))
-        .after_help("Prints info about the riders in Levi's Gran Fondo. If \
-                     neither -f or -l are passed, prints all riders matching \
-                     the other criteria. If either -f or -l are passed, prints \
-                     info about that rider.")
+        .after_help(
+            "Prints info about the riders in Levi's Gran Fondo. If \
+             neither -f or -l are passed, prints all riders matching \
+             the other criteria. If either -f or -l are passed, prints \
+             info about that rider.",
+        )
         .get_matches();
 
     let options = FilterOptions::from_arg_matches(&matches);
