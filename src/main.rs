@@ -1,10 +1,12 @@
 #[macro_use]
 extern crate clap;
+extern crate caseless;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 
+use caseless::canonical_caseless_match_str;
 use clap::{App, Arg};
 use std::time::Duration;
 use serde_json::*;
@@ -145,50 +147,70 @@ impl Rider {
     }
 }
 
-struct Bikemonkey {
-    riders: Vec<Rider>,
-    debug: bool,
+struct FilterOptions {
     courses: Option<Vec<Course>>,
     gender: Option<Gender>,
+    debug: bool,
+    firstname: Option<String>,
+    lastname: Option<String>,
 }
 
-impl Bikemonkey {
-    fn parse_command_line(matches: &clap::ArgMatches) -> Bikemonkey {
+impl FilterOptions {
+    fn from_arg_matches(matches: &clap::ArgMatches) -> FilterOptions {
         let courses = values_t!(matches.values_of("course"), Course).ok();
         let gender = value_t!(matches.value_of("gender"), Gender).ok();
         let debug = matches.is_present("debug");
+        let firstname = match matches.value_of("firstname") {
+            Some(name) => Some(String::from(name)),
+            None => None,
+        };
+        let lastname = match matches.value_of("lastname") {
+            Some(name) => Some(String::from(name)),
+            None => None,
+        };
 
-        Bikemonkey {
-            riders: Vec::new(),
-            debug: debug,
+        FilterOptions {
             courses: courses,
             gender: gender,
+            debug: debug,
+            firstname: firstname,
+            lastname: lastname,
         }
     }
+}
 
-    fn read_json(&mut self, path: &Path) -> std::io::Result<()> {
+struct Bikemonkey {
+    riders: Vec<Rider>,
+}
+
+impl Bikemonkey {
+    fn from_json(path: &Path, debug: bool) -> std::io::Result<Bikemonkey> {
         let file = File::open(&path)?;
         let blob: Results = serde_json::from_reader(file)?;
         let maybe_riders = blob.records
             .iter()
             .map(Rider::from_value)
             .filter_map(|r| {
-                if self.debug && r.is_err() {
+                if debug && r.is_err() {
                     println!("Warning: bad rider found {:?}", r);
                 }
                 r.ok()
             })
             .collect::<Vec<_>>();
 
-        self.riders = maybe_riders
+        Ok(Bikemonkey { riders: maybe_riders })
+    }
+
+    fn filter_riders(&self, filter_options: &FilterOptions) -> Vec<&Rider> {
+        let mut riders = self.riders
             .iter()
             .filter(|r| {
-                if let Some(ref courses) = self.courses {
+                if let Some(ref courses) = filter_options.courses {
                     if !courses.contains(&r.course) {
                         return false;
                     }
                 }
-                if let Some(ref gender) = self.gender {
+                if let Some(ref gender) = filter_options.gender {
                     if r.gender != *gender {
                         return false;
                     }
@@ -196,14 +218,14 @@ impl Bikemonkey {
 
                 true
             })
-            .cloned()
-            .collect::<Vec<_>>();
-        self.riders.sort_unstable_by_key(|r| r.elapsedtime);
-        Ok(())
+            .collect::<Vec<&Rider>>();
+        riders.sort_unstable_by_key(|r| r.elapsedtime);
+        riders
     }
 
-    fn print_all(&self) {
-        for (idx, r) in self.riders.iter().enumerate() {
+    fn print_all(&self, filter_options: FilterOptions) {
+        let riders = self.filter_riders(&filter_options);
+        for (idx, r) in riders.iter().enumerate() {
             println!(
                 "{} [{}, {}] {} {} ({})",
                 idx + 1,
@@ -213,6 +235,46 @@ impl Bikemonkey {
                 r.lastname,
                 r.displaytime
             )
+        }
+    }
+
+    fn print_info(&self, filter_options: FilterOptions) {
+        let riders = self.filter_riders(&filter_options);
+        let matches = riders.iter().enumerate().filter(|&(_idx, r)| {
+            match filter_options.firstname {
+                Some(ref name) => {
+                    if !canonical_caseless_match_str(&r.firstname, name) {
+                        return false
+                    }
+                }
+                _ => {}
+            }
+
+            match filter_options.lastname {
+                Some(ref name) => {
+                    if !canonical_caseless_match_str(&r.lastname, name) {
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+
+            true
+        }).collect::<Vec<_>>();
+
+        if matches.is_empty() {
+            println!("No riders were found.");
+            return;
+        }
+
+        for &(idx, rider) in matches.iter() {
+            println!("Rider {} {} came in position {} with a time of {} out of {} matching rider{}",
+                     rider.firstname,
+                     rider.lastname,
+                     idx + 1,
+                     rider.displaytime,
+                     riders.len(),
+                     if riders.len() > 1 { "s" } else { "" });
         }
     }
 }
@@ -236,16 +298,26 @@ fn main() {
                 .takes_value(true)
                 .possible_values(&Gender::variants()),
         )
+        .arg(Arg::from_usage("-f, --firstname <name>  'Find a rider with a given first name'"))
+        .arg(Arg::from_usage("-l, --lastname <name>  'Find a rider with a given last name'"))
         .arg(Arg::from_usage("-d, --debug   'Enable debugging'"))
         .arg(Arg::from_usage("[file]        'File to read as input'"))
+        .after_help("Prints info about the riders in Levi's Gran Fondo. If \
+                     neither -f or -l are passed, prints all riders matching \
+                     the other criteria. If either -f or -l are passed, prints \
+                     info about that rider.")
         .get_matches();
 
-    let mut program = Bikemonkey::parse_command_line(&matches);
+    let options = FilterOptions::from_arg_matches(&matches);
     let path = Path::new(matches.value_of("file").unwrap_or("lgfresults.json"));
-    match program.read_json(&path) {
+    let riders = match Bikemonkey::from_json(&path, options.debug) {
         Err(why) => panic!("couldn't open {}: {}", path.display(), why.description()),
-        _ => {}
-    }
+        Ok(riders) => riders,
+    };
 
-    program.print_all();
+    if options.firstname.is_some() || options.lastname.is_some() {
+        riders.print_info(options);
+    } else {
+        riders.print_all(options);
+    }
 }
