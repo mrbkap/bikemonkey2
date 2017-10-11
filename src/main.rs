@@ -239,13 +239,17 @@ impl Bikemonkey {
         let riders = self.filter_riders(&filter_options);
         for (idx, r) in riders.iter().enumerate() {
             println!(
-                "{} [{}, {}] {} {} ({})",
+                "{} [{}, {}] {} {} ({}) {}{}{}",
                 idx + 1,
                 r.bib,
                 r._id,
                 r.firstname,
                 r.lastname,
-                r.displaytime
+                r.displaytime,
+                r.course,
+                if r.willow_creek { " +WC" } else { "" },
+                if r.fort_ross { " Fort Ross" } else { "" },
+
             )
         }
     }
