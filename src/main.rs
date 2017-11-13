@@ -249,7 +249,6 @@ impl Bikemonkey {
                 r.course,
                 if r.willow_creek { " +WC" } else { "" },
                 if r.fort_ross { " Fort Ross" } else { "" },
-
             )
         }
     }
