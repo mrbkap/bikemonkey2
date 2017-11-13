@@ -105,7 +105,7 @@ impl Rider {
                 }
             }
 
-            let gender = match if idx < s.len() { Some(&s[idx]) } else { None } {
+            let gender = match s.get(idx) {
                 Some(&"Male") | None => Gender::Male,
                 Some(&"Female") => Gender::Female,
                 Some(other) => return Err(de::Error::custom(format!("bad gender {:?}", other))),
