@@ -83,11 +83,12 @@ impl Rider {
                 "PICCOLO" => (Course::Piccollo, false),
                 "MEDIO" => (Course::Medio, false),
                 "GRAN" => {
-                    let mut fr = false;
-                    if s[1] == "Fort" {
+                    let fr = if s[1] == "Fort" {
                         idx += 2;
-                        fr = true;
-                    }
+                        true
+                    } else {
+                        false
+                    };
                     (Course::Gran, fr)
                 }
                 "FAMILY" => return Err(de::Error::custom("don't deal with families")), // meh
