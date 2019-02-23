@@ -158,21 +158,21 @@ impl Rider {
     }
 }
 
-struct FilterOptions {
+struct FilterOptions<'a> {
     courses: Option<Vec<Course>>,
     gender: Option<Gender>,
     debug: bool,
-    firstname: Option<String>,
-    lastname: Option<String>,
+    firstname: Option<&'a str>,
+    lastname: Option<&'a str>,
 }
 
-impl FilterOptions {
-    fn from_arg_matches(matches: &clap::ArgMatches) -> FilterOptions {
+impl<'a> FilterOptions<'a> {
+    fn from_arg_matches(matches: &'a clap::ArgMatches) -> FilterOptions<'a> {
         let courses = values_t!(matches.values_of("course"), Course).ok();
         let gender = value_t!(matches.value_of("gender"), Gender).ok();
         let debug = matches.is_present("debug");
-        let firstname = matches.value_of("firstname").map(|s| s.to_string());
-        let lastname = matches.value_of("lastname").map(|s| s.to_string());
+        let firstname = matches.value_of("firstname");
+        let lastname = matches.value_of("lastname");
 
         FilterOptions {
             courses: courses,
