@@ -171,14 +171,8 @@ impl FilterOptions {
         let courses = values_t!(matches.values_of("course"), Course).ok();
         let gender = value_t!(matches.value_of("gender"), Gender).ok();
         let debug = matches.is_present("debug");
-        let firstname = match matches.value_of("firstname") {
-            Some(name) => Some(String::from(name)),
-            None => None,
-        };
-        let lastname = match matches.value_of("lastname") {
-            Some(name) => Some(String::from(name)),
-            None => None,
-        };
+        let firstname = matches.value_of("firstname").map(|s| s.to_string());
+        let lastname = matches.value_of("lastname").map(|s| s.to_string());
 
         FilterOptions {
             courses: courses,
