@@ -42,21 +42,21 @@ struct Results {
 }
 
 #[derive(Debug, Clone)]
-struct Rider {
-    firstname: String,
-    lastname: String,
+struct Rider<'a> {
+    firstname: &'a str,
+    lastname: &'a str,
     elapsedtime: Duration,
-    displaytime: String,
+    displaytime: &'a str,
     gender: Gender,
     course: Course,
     willow_creek: bool,
     fort_ross: bool,
     bib: u64,
-    _id: String,
+    _id: &'a str,
 }
 
-impl Rider {
-    fn from_value(v: &Value) -> Result<Rider> {
+impl<'a> Rider<'a> {
+    fn from_value(v: &'a Value) -> Result<Rider<'a>> {
         fn parse_duration(s: &str) -> Result<Duration> {
             let components: Vec<_> = s.split(":")
                 .map(|s| s.parse::<u64>())
@@ -144,16 +144,16 @@ impl Rider {
             .ok_or(de::Error::custom(format!("bad id {:?}", v["_id"])))?;
 
         Ok(Rider {
-            firstname: String::from(firstname),
-            lastname: String::from(lastname),
+            firstname: firstname,
+            lastname: lastname,
             elapsedtime: time,
-            displaytime: String::from(t),
+            displaytime: t,
             gender: gender,
             course: course,
             willow_creek: wc,
             fort_ross: fr,
             bib: bib,
-            _id: String::from(id),
+            _id: id,
         })
     }
 }
@@ -184,15 +184,13 @@ impl<'a> FilterOptions<'a> {
     }
 }
 
-struct Bikemonkey {
-    riders: Vec<Rider>,
+struct Bikemonkey<'a> {
+    riders: Vec<Rider<'a>>,
 }
 
-impl Bikemonkey {
-    fn from_json(path: &Path, debug: bool) -> std::io::Result<Bikemonkey> {
-        let file = File::open(&path)?;
-        let blob: Results = serde_json::from_reader(file)?;
-        let maybe_riders = blob.records
+impl<'a> Bikemonkey<'a> {
+    fn from_json(blob: &'a Results, debug: bool) -> std::io::Result<Bikemonkey<'a>> {
+        let riders = blob.records
             .iter()
             .map(Rider::from_value)
             .filter_map(|r| {
@@ -204,7 +202,7 @@ impl Bikemonkey {
             .collect::<Vec<_>>();
 
         Ok(Bikemonkey {
-            riders: maybe_riders,
+            riders,
         })
     }
 
@@ -342,7 +340,9 @@ fn main() {
 
     let options = FilterOptions::from_arg_matches(&matches);
     let path = Path::new(matches.value_of("file").unwrap_or("lgfresults.json"));
-    let riders = match Bikemonkey::from_json(&path, options.debug) {
+    let file = File::open(&path).expect(&format!("couldn't open {}", path.display()));
+    let blob: Results = serde_json::from_reader(file).expect(&format!("error parsing {}", path.display()));
+    let riders = match Bikemonkey::from_json(&blob, options.debug) {
         Err(why) => panic!("couldn't open {}: {}", path.display(), why.description()),
         Ok(riders) => riders,
     };
