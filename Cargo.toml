@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Blake Kaplan <mrbkap@gmail.com>"]
 
 [dependencies]
-clap = "~2.19.0"
+clap = "~2.32.0"
 serde_json = "1.0"
 serde = "*"
 serde_derive = "*"
