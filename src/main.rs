@@ -1,6 +1,9 @@
 extern crate caseless;
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate lazy_static;
+extern crate regex;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -8,11 +11,13 @@ extern crate serde_json;
 
 use caseless::canonical_caseless_match_str;
 use clap::{App, Arg};
-use serde::de;
+use regex::RegexSet;
+use std::time::Duration;
 use serde_json::*;
+use serde::de;
 use std::fs::File;
 use std::path::Path;
-use std::time::Duration;
+use std::error::Error;
 
 arg_enum! {
     #[derive(Debug, PartialEq, Clone)]
@@ -57,8 +62,7 @@ struct Rider<'a> {
 impl<'a> Rider<'a> {
     fn from_value(v: &'a Value) -> Result<Rider<'a>> {
         fn parse_duration(s: &str) -> Result<Duration> {
-            let components: Vec<_> = s
-                .split(":")
+            let components: Vec<_> = s.split(":")
                 .map(|s| s.parse::<u64>())
                 .filter_map(|r| r.ok())
                 .collect();
@@ -70,74 +74,70 @@ impl<'a> Rider<'a> {
             Ok(Duration::from_secs(secs))
         }
 
-        fn parse_course(s: Vec<&str>) -> Result<(Course, bool, bool, Gender)> {
-            let mut idx = 0;
-            let (course, fr) = match s[0] {
-                "IL" => {
-                    if s.len() < 3 {
-                        return Err(de::Error::custom(format!("bad route {:?}", s)));
-                    }
-                    idx += 1;
-                    (Course::IlRegno, false)
-                }
-                "PICCOLO" => (Course::Piccollo, false),
-                "MEDIO" => (Course::Medio, false),
-                "GRAN" => {
-                    let fr = if s[1] == "Fort" {
-                        idx += 2;
-                        true
-                    } else {
-                        false
-                    };
-                    (Course::Gran, fr)
-                }
-                "FAMILY" => return Err(de::Error::custom("don't deal with families")), // meh
-                _ => return Err(de::Error::custom(format!("unknown course {:?}", s))),
-            };
+        fn parse_course(s: &str) -> Result<(Course, bool, bool, Gender)> {
+            lazy_static! {
+                static ref set: RegexSet = RegexSet::new(&[
+                    "^IL REGNO",
+                    "^PICCOLO",
+                    "^MEDIO",
+                    "^GRAN",
+                    "^FAMILY",
 
-            let mut wc = false;
-            idx += 1;
-            if idx < s.len() {
-                if s[idx] == "WC" {
-                    wc = true;
-                    idx += 1;
-                } else if s[idx] == "TANDEM" {
-                    idx += 1;
-                }
+                    "Fort Ross",
+                    "WC",
+
+                    "Male$",
+                    "Female$",
+                ]).unwrap();
             }
 
-            let gender = match s.get(idx) {
-                Some(&"Male") | None => Gender::Male,
-                Some(&"Female") => Gender::Female,
-                Some(other) => return Err(de::Error::custom(format!("bad gender {:?}", other))),
+            let matches = set.matches(s);
+            let course = if matches.matched(0) {
+                Course::IlRegno
+            } else if matches.matched(1) {
+                Course::Piccollo
+            } else if matches.matched(2) {
+                Course::Medio
+            } else if matches.matched(3) {
+                Course::Gran
+            } else if matches.matched(4) {
+                return Err(de::Error::custom("don't deal with families"));
+            } else {
+                return Err(de::Error::custom(format!("unknown course {:?}", s)));
+            };
+
+            let fr = matches.matched(5);
+            let wc = matches.matched(6);
+
+            let gender = if matches.matched(7) {
+                Gender::Male
+            } else if matches.matched(8) {
+                Gender::Female
+            } else {
+                Gender::Male // XXX
             };
 
             Ok((course, wc, fr, gender))
         }
 
-        let firstname = v["firstname"].as_str().ok_or(de::Error::custom(format!(
-            "bad firstname {:?}",
-            v["firstname"]
-        )))?;
-        let lastname = v["lastname"].as_str().ok_or(de::Error::custom(format!(
-            "bad lastname {:?}",
-            v["lastname"]
-        )))?;
+        let firstname = v["firstname"].as_str().ok_or(de::Error::custom(
+            format!("bad firstname {:?}", v["firstname"]),
+        ))?;
+        let lastname = v["lastname"].as_str().ok_or(de::Error::custom(
+            format!("bad lastname {:?}", v["lastname"]),
+        ))?;
 
         if firstname.is_empty() && lastname.is_empty() {
             return Err(de::Error::custom("No riders with no name!"));
         }
 
-        let t = v["elapsedtime"].as_str().ok_or(de::Error::custom(format!(
-            "bad time {:?}",
-            v["elapsedtime"]
-        )))?;
+        let t = v["elapsedtime"].as_str().ok_or(de::Error::custom(
+            format!("bad time {:?}", v["elapsedtime"]),
+        ))?;
         let time = parse_duration(t)?;
         let route = v["route"]
             .as_str()
-            .ok_or(de::Error::custom(format!("bad course {:?}", v["route"])))?
-            .split(" ")
-            .collect::<Vec<_>>();
+            .ok_or(de::Error::custom(format!("bad course {:?}", v["route"])))?;
         let (course, wc, fr, gender) = parse_course(route)?;
         let bib = v["bib"]
             .as_u64()
@@ -193,8 +193,7 @@ struct Bikemonkey<'a> {
 
 impl<'a> Bikemonkey<'a> {
     fn from_json(blob: &'a Results, debug: bool) -> std::io::Result<Bikemonkey<'a>> {
-        let riders = blob
-            .records
+        let riders = blob.records
             .iter()
             .map(Rider::from_value)
             .filter_map(|r| {
@@ -205,12 +204,13 @@ impl<'a> Bikemonkey<'a> {
             })
             .collect::<Vec<_>>();
 
-        Ok(Bikemonkey { riders })
+        Ok(Bikemonkey {
+            riders,
+        })
     }
 
     fn filter_riders(&self, filter_options: &FilterOptions) -> Vec<&Rider> {
-        let mut riders = self
-            .riders
+        let mut riders = self.riders
             .iter()
             .filter(|r| {
                 if let Some(ref courses) = filter_options.courses {
@@ -255,16 +255,18 @@ impl<'a> Bikemonkey<'a> {
             .iter()
             .enumerate()
             .filter(|&(_idx, r)| {
-                if let Some(ref name) = filter_options.firstname {
-                    if !canonical_caseless_match_str(&r.firstname, name) {
+                match filter_options.firstname {
+                    Some(ref name) => if !canonical_caseless_match_str(&r.firstname, name) {
                         return false;
-                    }
+                    },
+                    _ => {}
                 }
 
-                if let Some(ref name) = filter_options.lastname {
-                    if !canonical_caseless_match_str(&r.lastname, name) {
+                match filter_options.lastname {
+                    Some(ref name) => if !canonical_caseless_match_str(&r.lastname, name) {
                         return false;
-                    }
+                    },
+                    _ => {}
                 }
 
                 true
@@ -342,10 +344,11 @@ fn main() {
     let options = FilterOptions::from_arg_matches(&matches);
     let path = Path::new(matches.value_of("file").unwrap_or("lgfresults.json"));
     let file = File::open(&path).expect(&format!("couldn't open {}", path.display()));
-    let blob: Results =
-        serde_json::from_reader(file).expect(&format!("error parsing {}", path.display()));
-    let riders = Bikemonkey::from_json(&blob, options.debug)
-        .expect(&format!("couldn't open {}", path.display()));
+    let blob: Results = serde_json::from_reader(file).expect(&format!("error parsing {}", path.display()));
+    let riders = match Bikemonkey::from_json(&blob, options.debug) {
+        Err(why) => panic!("couldn't open {}: {}", path.display(), why.description()),
+        Ok(riders) => riders,
+    };
 
     if options.firstname.is_some() || options.lastname.is_some() {
         riders.print_info(options);
