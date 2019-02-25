@@ -258,22 +258,16 @@ impl<'a> Bikemonkey<'a> {
             .iter()
             .enumerate()
             .filter(|&(_idx, r)| {
-                match filter_options.firstname {
-                    Some(ref name) => {
-                        if !canonical_caseless_match_str(&r.firstname, name) {
-                            return false;
-                        }
+                if let Some(ref name) = filter_options.firstname {
+                    if !canonical_caseless_match_str(&r.firstname, name) {
+                        return false;
                     }
-                    _ => {}
                 }
 
-                match filter_options.lastname {
-                    Some(ref name) => {
-                        if !canonical_caseless_match_str(&r.lastname, name) {
-                            return false;
-                        }
+                if let Some(ref name) = filter_options.lastname {
+                    if !canonical_caseless_match_str(&r.lastname, name) {
+                        return false;
                     }
-                    _ => {}
                 }
 
                 true
