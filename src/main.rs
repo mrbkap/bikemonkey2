@@ -12,12 +12,12 @@ extern crate serde_json;
 use caseless::canonical_caseless_match_str;
 use clap::{App, Arg};
 use regex::RegexSet;
-use std::time::Duration;
-use serde_json::*;
 use serde::de;
+use serde_json::*;
+use std::error::Error;
 use std::fs::File;
 use std::path::Path;
-use std::error::Error;
+use std::time::Duration;
 
 arg_enum! {
     #[derive(Debug, PartialEq, Clone)]
@@ -62,7 +62,8 @@ struct Rider<'a> {
 impl<'a> Rider<'a> {
     fn from_value(v: &'a Value) -> Result<Rider<'a>> {
         fn parse_duration(s: &str) -> Result<Duration> {
-            let components: Vec<_> = s.split(":")
+            let components: Vec<_> = s
+                .split(":")
                 .map(|s| s.parse::<u64>())
                 .filter_map(|r| r.ok())
                 .collect();
@@ -82,13 +83,12 @@ impl<'a> Rider<'a> {
                     "^MEDIO",
                     "^GRAN",
                     "^FAMILY",
-
                     "Fort Ross",
                     "WC",
-
                     "Male$",
                     "Female$",
-                ]).unwrap();
+                ])
+                .unwrap();
             }
 
             let matches = set.matches(s);
@@ -120,20 +120,23 @@ impl<'a> Rider<'a> {
             Ok((course, wc, fr, gender))
         }
 
-        let firstname = v["firstname"].as_str().ok_or(de::Error::custom(
-            format!("bad firstname {:?}", v["firstname"]),
-        ))?;
-        let lastname = v["lastname"].as_str().ok_or(de::Error::custom(
-            format!("bad lastname {:?}", v["lastname"]),
-        ))?;
+        let firstname = v["firstname"].as_str().ok_or(de::Error::custom(format!(
+            "bad firstname {:?}",
+            v["firstname"]
+        )))?;
+        let lastname = v["lastname"].as_str().ok_or(de::Error::custom(format!(
+            "bad lastname {:?}",
+            v["lastname"]
+        )))?;
 
         if firstname.is_empty() && lastname.is_empty() {
             return Err(de::Error::custom("No riders with no name!"));
         }
 
-        let t = v["elapsedtime"].as_str().ok_or(de::Error::custom(
-            format!("bad time {:?}", v["elapsedtime"]),
-        ))?;
+        let t = v["elapsedtime"].as_str().ok_or(de::Error::custom(format!(
+            "bad time {:?}",
+            v["elapsedtime"]
+        )))?;
         let time = parse_duration(t)?;
         let route = v["route"]
             .as_str()
@@ -178,11 +181,11 @@ impl<'a> FilterOptions<'a> {
         let lastname = matches.value_of("lastname");
 
         FilterOptions {
-            courses: courses,
-            gender: gender,
-            debug: debug,
-            firstname: firstname,
-            lastname: lastname,
+            courses,
+            gender,
+            debug,
+            firstname,
+            lastname,
         }
     }
 }
@@ -193,7 +196,8 @@ struct Bikemonkey<'a> {
 
 impl<'a> Bikemonkey<'a> {
     fn from_json(blob: &'a Results, debug: bool) -> std::io::Result<Bikemonkey<'a>> {
-        let riders = blob.records
+        let riders = blob
+            .records
             .iter()
             .map(Rider::from_value)
             .filter_map(|r| {
@@ -204,13 +208,12 @@ impl<'a> Bikemonkey<'a> {
             })
             .collect::<Vec<_>>();
 
-        Ok(Bikemonkey {
-            riders,
-        })
+        Ok(Bikemonkey { riders })
     }
 
     fn filter_riders(&self, filter_options: &FilterOptions) -> Vec<&Rider> {
-        let mut riders = self.riders
+        let mut riders = self
+            .riders
             .iter()
             .filter(|r| {
                 if let Some(ref courses) = filter_options.courses {
@@ -256,16 +259,20 @@ impl<'a> Bikemonkey<'a> {
             .enumerate()
             .filter(|&(_idx, r)| {
                 match filter_options.firstname {
-                    Some(ref name) => if !canonical_caseless_match_str(&r.firstname, name) {
-                        return false;
-                    },
+                    Some(ref name) => {
+                        if !canonical_caseless_match_str(&r.firstname, name) {
+                            return false;
+                        }
+                    }
                     _ => {}
                 }
 
                 match filter_options.lastname {
-                    Some(ref name) => if !canonical_caseless_match_str(&r.lastname, name) {
-                        return false;
-                    },
+                    Some(ref name) => {
+                        if !canonical_caseless_match_str(&r.lastname, name) {
+                            return false;
+                        }
+                    }
                     _ => {}
                 }
 
@@ -344,7 +351,8 @@ fn main() {
     let options = FilterOptions::from_arg_matches(&matches);
     let path = Path::new(matches.value_of("file").unwrap_or("lgfresults.json"));
     let file = File::open(&path).expect(&format!("couldn't open {}", path.display()));
-    let blob: Results = serde_json::from_reader(file).expect(&format!("error parsing {}", path.display()));
+    let blob: Results =
+        serde_json::from_reader(file).expect(&format!("error parsing {}", path.display()));
     let riders = match Bikemonkey::from_json(&blob, options.debug) {
         Err(why) => panic!("couldn't open {}: {}", path.display(), why.description()),
         Ok(riders) => riders,
