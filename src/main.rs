@@ -120,33 +120,33 @@ impl<'a> Rider<'a> {
             return Err(de::Error::custom("No riders with no name!"));
         }
 
-        let t = v["elapsedtime"].as_str().ok_or(de::Error::custom(format!(
+        let displaytime = v["elapsedtime"].as_str().ok_or(de::Error::custom(format!(
             "bad time {:?}",
             v["elapsedtime"]
         )))?;
-        let time = parse_duration(t)?;
+        let elapsedtime = parse_duration(displaytime)?;
         let route = v["route"]
             .as_str()
             .ok_or(de::Error::custom(format!("bad course {:?}", v["route"])))?;
-        let (course, wc, fr, gender) = parse_course(route)?;
+        let (course, willow_creek, fort_ross, gender) = parse_course(route)?;
         let bib = v["bib"]
             .as_u64()
             .ok_or(de::Error::custom(format!("bad bibno {:?}", v["bib"])))?;
-        let id = v["_id"]
+        let _id = v["_id"]
             .as_str()
             .ok_or(de::Error::custom(format!("bad id {:?}", v["_id"])))?;
 
         Ok(Rider {
-            firstname: firstname,
-            lastname: lastname,
-            elapsedtime: time,
-            displaytime: t,
-            gender: gender,
-            course: course,
-            willow_creek: wc,
-            fort_ross: fr,
-            bib: bib,
-            _id: id,
+            firstname,
+            lastname,
+            elapsedtime,
+            displaytime,
+            gender,
+            course,
+            willow_creek,
+            fort_ross,
+            bib,
+            _id,
         })
     }
 }
