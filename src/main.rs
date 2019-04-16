@@ -5,15 +5,13 @@ extern crate clap;
 extern crate lazy_static;
 extern crate regex;
 extern crate serde;
-#[macro_use]
-extern crate serde_derive;
 extern crate serde_json;
 
 use caseless::canonical_caseless_match_str;
 use clap::{App, Arg};
 use regex::RegexSet;
-use serde::de;
-use serde_json::*;
+use serde::{de, Deserialize};
+use serde_json::{Result, Value};
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
@@ -77,7 +75,7 @@ impl<'a> Rider<'a> {
 
         fn parse_course(s: &str) -> Result<(Course, bool, bool, Gender)> {
             lazy_static! {
-                static ref set: RegexSet = RegexSet::new(&[
+                static ref SET: RegexSet = RegexSet::new(&[
                     "^IL REGNO",
                     "^PICCOLO",
                     "^MEDIO",
@@ -91,7 +89,7 @@ impl<'a> Rider<'a> {
                 .unwrap();
             }
 
-            let matches = set.matches(s);
+            let matches = SET.matches(s);
             let course = if matches.matched(0) {
                 Course::IlRegno
             } else if matches.matched(1) {
