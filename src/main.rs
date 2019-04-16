@@ -1,21 +1,10 @@
-extern crate caseless;
-#[macro_use]
-extern crate clap;
-#[macro_use]
-extern crate lazy_static;
-extern crate regex;
-extern crate serde;
-extern crate serde_json;
-
 use caseless::canonical_caseless_match_str;
-use clap::{App, Arg};
+use clap::{arg_enum, value_t, values_t, App, Arg};
+use lazy_static::lazy_static;
 use regex::RegexSet;
 use serde::{de, Deserialize};
 use serde_json::{Result, Value};
-use std::error::Error;
-use std::fs::File;
-use std::path::Path;
-use std::time::Duration;
+use std::{error::Error, fs::File, path::Path, time::Duration};
 
 arg_enum! {
     #[derive(Debug, PartialEq, Clone)]
