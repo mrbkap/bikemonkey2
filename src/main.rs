@@ -268,10 +268,11 @@ impl<'a> Bikemonkey<'a> {
 
         for &(idx, rider) in matches.iter() {
             println!(
-                "Rider {} {} came in position {} with a time of {} out of {} matching rider{} on \
+                "Rider {} {} ({}) came in position {} with a time of {} out of {} matching rider{} on \
                  the {}{}{} route",
                 rider.firstname,
                 rider.lastname,
+                rider.bib,
                 idx + 1,
                 rider.displaytime,
                 riders.len(),
